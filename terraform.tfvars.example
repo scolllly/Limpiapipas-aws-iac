@@ -1,0 +1,8 @@
+﻿# Ejemplo de variables personalizadas para el despliegue
+aws_region         = "us-east-1"
+project_name       = "limpiapipas-demo"
+environment        = "dev"
+container_port     = 80
+desired_task_count = 1
+fargate_cpu        = "256" # 0.25 vCPU (minimo)
+fargate_memory     = "512" # 0.5 GB (minimo)
