@@ -1,4 +1,4 @@
-﻿# Infraestructura Demo AWS con Terraform (Costo Mínimo / Capa Gratuita)
+# Infraestructura Demo AWS con Terraform (Costo Mínimo / Capa Gratuita)
 
 Este repositorio contiene la Infraestructura como Código (IaC) en Terraform para desplegar una arquitectura completa en AWS optimizada para **costo mínimo** (compatible con AWS Free Tier o céntimos de dólar para pruebas).
 
@@ -65,6 +65,34 @@ Al finalizar, Terraform mostrará los outputs con las URLs y nombres de recursos
 - `ecr_repository_url`: URI del repositorio ECR.
 - `s3_bucket_name`: Nombre del bucket S3 para la imagen.
 - `sample_image_url`: Ejemplo de URL para referenciar la imagen en el HTML.
+
+---
+
+## Despliegue Automatizado con GitHub Actions
+
+El repositorio incluye workflows de GitHub Actions para automatizar el ciclo de vida de la infraestructura:
+
+### Secretos Requeridos en GitHub
+
+En tu repositorio de GitHub, ve a **Settings > Secrets and variables > Actions** y agrega los siguientes secretos de repositorio:
+
+| Secreto | Descripción | Requerido |
+| :--- | :--- | :--- |
+| `AWS_ACCESS_KEY_ID` | Access Key ID de tu usuario IAM con permisos para Terraform | **Sí** |
+| `AWS_SECRET_ACCESS_KEY` | Secret Access Key correspondiente | **Sí** |
+| `AWS_REGION` | Región de AWS (ej: `us-east-1`). Por defecto usa `us-east-1` si se omite | No |
+
+### Workflows Incluidos
+
+1. **Deploy (`.github/workflows/deploy.yml`)**:
+   - **Trigger automático**: Cada vez que hagas `push` a la rama `main-aws`.
+   - **Trigger manual**: Puede ejecutarse desde la pestaña **Actions > Deploy Terraform to AWS > Run workflow**.
+   - Ejecuta `fmt`, `init`, `validate`, `plan` y `apply`, publicando un resumen con todas las URLs en el Step Summary de GitHub Actions.
+
+2. **Destroy (`.github/workflows/destroy.yml`)**:
+   - **Trigger manual**: Se ejecuta desde la pestaña **Actions > Destroy AWS Infrastructure > Run workflow**.
+   - Requiere ingresar la confirmación `"destroy"` en el campo de entrada para evitar eliminaciones accidentales.
+   - Destruye todos los recursos de AWS para mantener costo $0 al concluir las pruebas.
 
 ---
 

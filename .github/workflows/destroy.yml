@@ -1,0 +1,49 @@
+﻿name: "Destroy AWS Infrastructure"
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: 'Escribe "destroy" para confirmar la eliminacion completa de la infraestructura'
+        required: true
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  destroy:
+    name: "Terraform Destroy"
+    if: ${{ github.event.inputs.confirmation == 'destroy' }}
+    runs-on: ubuntu-latest
+    env:
+      AWS_REGION: ${{ secrets.AWS_REGION != '' && secrets.AWS_REGION || 'us-east-1' }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.0"
+
+      - name: Terraform Init
+        id: init
+        run: terraform init
+
+      - name: Terraform Destroy
+        id: destroy
+        run: terraform destroy -auto-approve -no-color
+
+      - name: Output Destroy Summary
+        run: |
+          echo "### 🗑️ Infraestructura Destruida con Exito" >> $GITHUB_STEP_SUMMARY
+          echo "Todos los recursos de AWS asociados a esta demo han sido eliminados correctamente." >> $GITHUB_STEP_SUMMARY
