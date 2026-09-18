@@ -1,4 +1,4 @@
-﻿# Rol de ejecucion de tareas ECS (para descargar imagenes de ECR y emitir logs a CloudWatch)
+# Rol de ejecucion de tareas ECS (para descargar imagenes de ECR y emitir logs a CloudWatch)
 resource "aws_iam_role" "ecs_task_execution_role" {
   name = "${var.project_name}-ecs-execution-role"
 

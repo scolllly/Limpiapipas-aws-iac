@@ -1,4 +1,4 @@
-﻿# Balanceador de Carga de Aplicacion (ALB)
+# Balanceador de Carga de Aplicacion (ALB)
 resource "aws_lb" "main" {
   name               = "${var.project_name}-alb"
   internal           = false

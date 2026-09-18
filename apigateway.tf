@@ -1,4 +1,4 @@
-﻿# API Gateway HTTP API v2 (Publico, ligero y con 1 Millon de llamadas gratis/mes)
+# API Gateway HTTP API v2 (Publico, ligero y con 1 Millon de llamadas gratis/mes)
 resource "aws_apigatewayv2_api" "http_api" {
   name          = "${var.project_name}-http-api"
   protocol_type = "HTTP"

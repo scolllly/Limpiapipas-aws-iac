@@ -1,4 +1,4 @@
-﻿# Repositorio ECR para alojar la imagen de la aplicacion HTML
+# Repositorio ECR para alojar la imagen de la aplicacion HTML
 resource "aws_ecr_repository" "app" {
   name                 = "${var.project_name}-repo"
   image_tag_mutability = "MUTABLE"

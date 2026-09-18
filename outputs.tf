@@ -1,4 +1,4 @@
-﻿output "api_gateway_url" {
+output "api_gateway_url" {
   description = "URL publica principal del API Gateway (Punto de entrada recomendado)"
   value       = aws_apigatewayv2_stage.default.invoke_url
 }

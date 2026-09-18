@@ -1,4 +1,4 @@
-﻿# Security Group para el Application Load Balancer (ALB)
+# Security Group para el Application Load Balancer (ALB)
 resource "aws_security_group" "alb" {
   name        = "${var.project_name}-alb-sg"
   description = "Permite trafico HTTP entrante hacia el ALB"

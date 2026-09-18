@@ -1,4 +1,4 @@
-﻿# CloudWatch Log Group con retencion minima de 1 dia para mantener costo cero
+# CloudWatch Log Group con retencion minima de 1 dia para mantener costo cero
 resource "aws_cloudwatch_log_group" "ecs" {
   name              = "/ecs/${var.project_name}"
   retention_in_days = 1
