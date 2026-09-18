@@ -53,17 +53,6 @@ resource "aws_ecs_task_definition" "app" {
         }
       ]
 
-      environment = [
-        {
-          name  = "S3_BUCKET_NAME"
-          value = aws_s3_bucket.assets.id
-        },
-        {
-          name  = "S3_BUCKET_DOMAIN"
-          value = aws_s3_bucket.assets.bucket_regional_domain_name
-        }
-      ]
-
       logConfiguration = {
         logDriver = "awslogs"
         options = {

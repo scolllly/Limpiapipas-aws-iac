@@ -17,18 +17,3 @@ output "ecr_login_command" {
   description = "Comando AWS CLI para autenticar Docker contra el repositorio ECR"
   value       = "aws ecr get-login-password --region ${var.aws_region} | docker login --username AWS --password-stdin ${aws_ecr_repository.app.repository_url}"
 }
-
-output "s3_bucket_name" {
-  description = "Nombre del bucket S3 creado para alojar imagenes"
-  value       = aws_s3_bucket.assets.id
-}
-
-output "s3_bucket_domain" {
-  description = "Dominio regional del bucket S3"
-  value       = aws_s3_bucket.assets.bucket_regional_domain_name
-}
-
-output "sample_image_url" {
-  description = "URL publica de ejemplo para referenciar una imagen en S3 desde el HTML (ej: imagen.jpg)"
-  value       = "https://${aws_s3_bucket.assets.bucket_regional_domain_name}/imagen.jpg"
-}

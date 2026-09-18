@@ -30,7 +30,6 @@ S3 Bucket (assets estáticos)
 | API Gateway HTTP API v2 | Punto de entrada público, 1M llamadas gratis/mes |
 | ECS Cluster + Service | Fargate SPOT, 0.25 vCPU / 512 MB |
 | ECR Repository | Registro de imágenes Docker privado |
-| S3 Bucket | Assets estáticos con acceso público de lectura |
 | CloudWatch Logs | Retención de 1 día para costo cero |
 | IAM Roles | Execution role + Task role para ECS |
 
@@ -193,8 +192,6 @@ El usuario IAM necesita los siguientes permisos para poder desplegar toda la inf
       ],
       "Resource": "arn:aws:s3:::*"
     },
-    {
-      "Sid": "DynamoDBPermissions",
       "Effect": "Allow",
       "Action": [
         "dynamodb:CreateTable", "dynamodb:DeleteTable", "dynamodb:DescribeTable",
