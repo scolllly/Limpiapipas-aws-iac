@@ -40,6 +40,20 @@ jobs:
         run: terraform init
         working-directory: bootstrap
 
+      - name: Bootstrap Import Existing Resources
+        working-directory: bootstrap
+        env:
+          PROJECT: ${{ vars.PROJECT_NAME != '' && vars.PROJECT_NAME || 'limpiapipas-demo' }}
+        run: |
+          BUCKET="${PROJECT}-tfstate"
+          TABLE="${PROJECT}-tfstate-lock"
+
+          terraform import -no-color "aws_s3_bucket.tfstate"                              "$BUCKET" 2>&1 || true
+          terraform import -no-color "aws_s3_bucket_versioning.tfstate"                   "$BUCKET" 2>&1 || true
+          terraform import -no-color "aws_s3_bucket_server_side_encryption_configuration.tfstate" "$BUCKET" 2>&1 || true
+          terraform import -no-color "aws_s3_bucket_public_access_block.tfstate"          "$BUCKET" 2>&1 || true
+          terraform import -no-color "aws_dynamodb_table.tfstate_lock"                    "$TABLE"  2>&1 || true
+
       - name: Bootstrap Destroy
         run: terraform destroy -auto-approve -no-color
         working-directory: bootstrap

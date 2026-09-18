@@ -34,13 +34,30 @@ jobs:
           terraform_wrapper: false
 
       # ------------------------------------------------------------------
-      # BOOTSTRAP: crea el bucket S3 y la tabla DynamoDB para el state
-      # remoto si no existen todavia. Es idempotente: si ya existen,
-      # terraform apply no hace nada.
+      # BOOTSTRAP
+      # Los recursos tienen nombres fijos. Antes del apply se intenta
+      # importar cada recurso: si ya existe lo adopta en el state local,
+      # si no existe el import falla silenciosamente y apply lo crea.
+      # Esto hace el bootstrap idempotente sin persistir state en el repo.
       # ------------------------------------------------------------------
       - name: Bootstrap Init
         run: terraform init
         working-directory: bootstrap
+
+      - name: Bootstrap Import Existing Resources
+        working-directory: bootstrap
+        env:
+          PROJECT: ${{ vars.PROJECT_NAME != '' && vars.PROJECT_NAME || 'limpiapipas-demo' }}
+        run: |
+          BUCKET="${PROJECT}-tfstate"
+          TABLE="${PROJECT}-tfstate-lock"
+          REGION="${AWS_REGION}"
+
+          terraform import -no-color "aws_s3_bucket.tfstate"                              "$BUCKET"           2>&1 || true
+          terraform import -no-color "aws_s3_bucket_versioning.tfstate"                   "$BUCKET"           2>&1 || true
+          terraform import -no-color "aws_s3_bucket_server_side_encryption_configuration.tfstate" "$BUCKET"   2>&1 || true
+          terraform import -no-color "aws_s3_bucket_public_access_block.tfstate"          "$BUCKET"           2>&1 || true
+          terraform import -no-color "aws_dynamodb_table.tfstate_lock"                    "$TABLE"            2>&1 || true
 
       - name: Bootstrap Apply
         run: terraform apply -auto-approve -no-color
@@ -48,11 +65,13 @@ jobs:
 
       - name: Read Bootstrap Outputs
         id: bootstrap
+        env:
+          PROJECT: ${{ vars.PROJECT_NAME != '' && vars.PROJECT_NAME || 'limpiapipas-demo' }}
         run: |
-          echo "bucket=$(terraform output -raw state_bucket_name)" >> $GITHUB_OUTPUT
-          echo "table=$(terraform output -raw dynamodb_table_name)"  >> $GITHUB_OUTPUT
-          echo "region=$(terraform output -raw aws_region)"          >> $GITHUB_OUTPUT
-        working-directory: bootstrap
+          # Los nombres son fijos y conocidos, no dependen del state
+          echo "bucket=${PROJECT}-tfstate"      >> $GITHUB_OUTPUT
+          echo "table=${PROJECT}-tfstate-lock"  >> $GITHUB_OUTPUT
+          echo "region=${AWS_REGION}"            >> $GITHUB_OUTPUT
 
       # ------------------------------------------------------------------
       # STACK PRINCIPAL

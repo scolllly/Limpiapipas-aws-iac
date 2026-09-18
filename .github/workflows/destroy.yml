@@ -36,26 +36,37 @@ jobs:
           terraform_version: "1.9.0"
           terraform_wrapper: false
 
-      # ------------------------------------------------------------------
-      # Leer outputs del bootstrap para obtener el nombre del bucket y
-      # la tabla DynamoDB sin hardcodearlos.
-      # El bootstrap NO se destruye aqui: el bucket de state debe
-      # sobrevivir para futuros re-deploys.
-      # ------------------------------------------------------------------
+      # Bootstrap: importar recursos existentes para obtener los outputs
       - name: Bootstrap Init
         run: terraform init
         working-directory: bootstrap
 
+      - name: Bootstrap Import Existing Resources
+        working-directory: bootstrap
+        env:
+          PROJECT: ${{ vars.PROJECT_NAME != '' && vars.PROJECT_NAME || 'limpiapipas-demo' }}
+        run: |
+          BUCKET="${PROJECT}-tfstate"
+          TABLE="${PROJECT}-tfstate-lock"
+
+          terraform import -no-color "aws_s3_bucket.tfstate"                              "$BUCKET" 2>&1 || true
+          terraform import -no-color "aws_s3_bucket_versioning.tfstate"                   "$BUCKET" 2>&1 || true
+          terraform import -no-color "aws_s3_bucket_server_side_encryption_configuration.tfstate" "$BUCKET" 2>&1 || true
+          terraform import -no-color "aws_s3_bucket_public_access_block.tfstate"          "$BUCKET" 2>&1 || true
+          terraform import -no-color "aws_dynamodb_table.tfstate_lock"                    "$TABLE"  2>&1 || true
+
       - name: Read Bootstrap Outputs
         id: bootstrap
+        env:
+          PROJECT: ${{ vars.PROJECT_NAME != '' && vars.PROJECT_NAME || 'limpiapipas-demo' }}
         run: |
-          echo "bucket=$(terraform output -raw state_bucket_name)" >> $GITHUB_OUTPUT
-          echo "table=$(terraform output -raw dynamodb_table_name)"  >> $GITHUB_OUTPUT
-          echo "region=$(terraform output -raw aws_region)"          >> $GITHUB_OUTPUT
-        working-directory: bootstrap
+          echo "bucket=${PROJECT}-tfstate"      >> $GITHUB_OUTPUT
+          echo "table=${PROJECT}-tfstate-lock"  >> $GITHUB_OUTPUT
+          echo "region=${AWS_REGION}"            >> $GITHUB_OUTPUT
 
       # ------------------------------------------------------------------
-      # STACK PRINCIPAL: destruir todos los recursos de negocio
+      # STACK PRINCIPAL: destruir todos los recursos de negocio.
+      # El bootstrap NO se destruye aqui.
       # ------------------------------------------------------------------
       - name: Terraform Init
         run: |

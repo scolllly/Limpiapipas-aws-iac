@@ -1,6 +1,6 @@
 output "state_bucket_name" {
   description = "Nombre del bucket S3 que almacena el state del stack principal"
-  value       = aws_s3_bucket.tfstate.id
+  value       = local.bucket_name
 }
 
 output "state_bucket_arn" {
@@ -10,7 +10,7 @@ output "state_bucket_arn" {
 
 output "dynamodb_table_name" {
   description = "Nombre de la tabla DynamoDB usada para el locking del state"
-  value       = aws_dynamodb_table.tfstate_lock.name
+  value       = local.table_name
 }
 
 output "aws_region" {

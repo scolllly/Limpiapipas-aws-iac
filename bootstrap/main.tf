@@ -1,25 +1,21 @@
 # ============================================================
 # Bootstrap — Infraestructura de estado remoto de Terraform
 #
-# Este stack se aplica UNA SOLA VEZ antes del stack principal.
-# Su propio state se guarda localmente y puede commitearse al
-# repositorio porque no contiene secretos ni datos sensibles.
+# Usa nombres fijos para que sea completamente idempotente
+# sin necesitar persistir el state entre ejecuciones.
+# El workflow importa los recursos si ya existen antes de
+# correr apply, evitando errores de recurso duplicado.
 # ============================================================
 
-# Sufijo aleatorio para garantizar nombre de bucket globalmente unico
-resource "random_id" "suffix" {
-  byte_length = 4
-}
-
 locals {
-  bucket_name = "${var.project_name}-tfstate-${random_id.suffix.hex}"
+  bucket_name = "${var.project_name}-tfstate"
   table_name  = "${var.project_name}-tfstate-lock"
 }
 
 # Bucket S3 para almacenar el state del stack principal
 resource "aws_s3_bucket" "tfstate" {
   bucket        = local.bucket_name
-  force_destroy = false # Proteccion extra: no eliminar accidentalmente el state
+  force_destroy = false
 
   tags = {
     Name    = local.bucket_name
@@ -60,7 +56,7 @@ resource "aws_s3_bucket_public_access_block" "tfstate" {
 # Tabla DynamoDB para locking del state (evita applies concurrentes)
 resource "aws_dynamodb_table" "tfstate_lock" {
   name         = local.table_name
-  billing_mode = "PAY_PER_REQUEST" # Sin costo fijo, se cobra por operacion
+  billing_mode = "PAY_PER_REQUEST"
   hash_key     = "LockID"
 
   attribute {
