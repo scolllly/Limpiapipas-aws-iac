@@ -188,7 +188,8 @@ El usuario IAM necesita los siguientes permisos para poder desplegar toda la inf
         "s3:GetBucketLogging", "s3:GetAccelerateConfiguration",
         "s3:GetBucketRequestPayment", "s3:GetEncryptionConfiguration",
         "s3:PutEncryptionConfiguration",
-        "s3:GetObject", "s3:PutObject", "s3:DeleteObject"
+        "s3:GetObject", "s3:PutObject", "s3:DeleteObject",
+        "s3:GetBucketAcl", "s3:PutBucketAcl"
       ],
       "Resource": "arn:aws:s3:::*"
     },
@@ -197,7 +198,8 @@ El usuario IAM necesita los siguientes permisos para poder desplegar toda la inf
       "Effect": "Allow",
       "Action": [
         "dynamodb:CreateTable", "dynamodb:DeleteTable", "dynamodb:DescribeTable",
-        "dynamodb:DescribeTimeToLive", "dynamodb:ListTagsOfResource",
+        "dynamodb:DescribeTimeToLive", "dynamodb:DescribeContinuousBackups",
+        "dynamodb:ListTagsOfResource",
         "dynamodb:TagResource", "dynamodb:UntagResource",
         "dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:DeleteItem"
       ],
