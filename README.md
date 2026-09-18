@@ -179,8 +179,8 @@ El usuario IAM necesita los siguientes permisos para poder desplegar toda la inf
         "s3:CreateBucket", "s3:DeleteBucket", "s3:GetBucketLocation", "s3:ListBucket",
         "s3:GetBucketPolicy", "s3:PutBucketPolicy", "s3:DeleteBucketPolicy",
         "s3:GetBucketPublicAccessBlock", "s3:PutBucketPublicAccessBlock",
-        "s3:GetBucketCors", "s3:PutBucketCors", "s3:DeleteBucketCors",
-        "s3:GetBucketTagging", "s3:PutBucketTagging", "s3:DeleteBucketTagging",
+        "s3:GetBucketCors", "s3:PutBucketCors", 
+        "s3:GetBucketTagging", "s3:PutBucketTagging", 
         "s3:GetBucketVersioning", "s3:PutBucketVersioning",
         "s3:GetBucketObjectLockConfiguration",
         "s3:GetLifecycleConfiguration", "s3:PutLifecycleConfiguration",
@@ -216,13 +216,30 @@ El usuario IAM necesita los siguientes permisos para poder desplegar toda la inf
       "Resource": "*"
     },
     {
+      "Sid": "ServiceLinkedRoles",
+      "Effect": "Allow",
+      "Action": "iam:CreateServiceLinkedRole",
+      "Resource": "*",
+      "Condition": {
+        "StringLike": {
+          "iam:AWSServiceName": [
+            "elasticloadbalancing.amazonaws.com",
+            "ecs.amazonaws.com"
+          ]
+        }
+      }
+    },
+    {
       "Sid": "APIGatewayV2Permissions",
       "Effect": "Allow",
       "Action": [
         "apigateway:GET", "apigateway:POST", "apigateway:PUT",
         "apigateway:PATCH", "apigateway:DELETE"
       ],
-      "Resource": "arn:aws:apigateway:*::/*"
+      "Resource": [
+        "arn:aws:apigateway:*::/*",
+        "arn:aws:apigateway:*:*:*"
+      ]
     },
     {
       "Sid": "CloudWatchLogsPermissions",
