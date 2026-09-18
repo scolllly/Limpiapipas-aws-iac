@@ -1,0 +1,52 @@
+name: "Destroy Bootstrap (State Backend)"
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: 'Escribe "destroy-bootstrap" para confirmar. ADVERTENCIA: elimina el bucket de state y la tabla DynamoDB permanentemente.'
+        required: true
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  destroy-bootstrap:
+    name: "Terraform Destroy Bootstrap"
+    if: ${{ github.event.inputs.confirmation == 'destroy-bootstrap' }}
+    runs-on: ubuntu-latest
+    env:
+      AWS_REGION: ${{ secrets.AWS_REGION != '' && secrets.AWS_REGION || 'us-east-1' }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.0"
+          terraform_wrapper: false
+
+      - name: Bootstrap Init
+        run: terraform init
+        working-directory: bootstrap
+
+      - name: Bootstrap Destroy
+        run: terraform destroy -auto-approve -no-color
+        working-directory: bootstrap
+
+      - name: Output Summary
+        run: |
+          echo "### Bootstrap Destruido" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "El bucket S3 de state y la tabla DynamoDB han sido eliminados." >> $GITHUB_STEP_SUMMARY
+          echo "Para volver a desplegar la infraestructura, ejecuta el workflow **Deploy Terraform to AWS**." >> $GITHUB_STEP_SUMMARY

@@ -1,169 +1,366 @@
-# Infraestructura Demo AWS con Terraform (Costo Mínimo / Capa Gratuita)
+# limpiapipas-terraform
 
-Este repositorio contiene la Infraestructura como Código (IaC) en Terraform para desplegar una arquitectura completa en AWS optimizada para **costo mínimo** (compatible con AWS Free Tier o céntimos de dólar para pruebas).
+Infraestructura como código (IaC) para el proyecto Limpiapipas Demo desplegada en AWS con Terraform y automatizada mediante GitHub Actions.
 
 ## Arquitectura
 
 ```
-[Usuario / Navegador]
-        │
-        ▼
-[API Gateway (HTTP API v2 Público)]
-        │
-        ▼
-[Application Load Balancer (ALB)]
-        │
-        ▼
-[ECS Fargate (Subredes Públicas sin NAT Gateway)]
-        │
-        ├── Descarga imagen ──► [ECR (Retención 1 imagen)]
-        └── Referencia HTML  ──► [S3 Bucket Público con CORS]
+Internet
+   │
+   ▼
+API Gateway HTTP API (v2)
+   │  enruta todo el tráfico
+   ▼
+Application Load Balancer (ALB)
+   │  distribuye entre tareas
+   ▼
+ECS Fargate (FARGATE_SPOT)
+   │  contenedor de la aplicación
+   ▼
+S3 Bucket (assets estáticos)
 ```
 
-### Componentes Incluidos
+**Recursos desplegados:**
 
-1. **API Gateway (HTTP API v2 Público)**: Punto de entrada público ultraligero y de latencia mínima. 1 Millón de peticiones gratis al mes.
-2. **Application Load Balancer (ALB)**: Balanceador de carga en 2 zonas de disponibilidad (incluido en Free Tier por 750 h/mes los primeros 12 meses).
-3. **ECS Cluster con Fargate Spot**: Contenedor con tamaño mínimo (0.25 vCPU y 0.5 GB RAM) utilizando capacidad Spot (~$0.004/hora).
-4. **AWS ECR Privado**: Repositorio de imágenes Docker con política de ciclo de vida para retener solo 1 imagen (evitando superar los 500 MB gratuitos).
-5. **AWS S3**: Almacenamiento de objetos con CORS y política de lectura pública para servir la imagen directamente al navegador cuando la plantilla HTML la renderice.
-6. **VPC sin NAT Gateway**: Ahorro inmediato de ~$32 USD/mes. Las tareas tienen IP pública para descargar la imagen de ECR, pero su Security Group bloquea todo tráfico entrante salvo el originado por el ALB.
+| Recurso | Descripción |
+|---|---|
+| VPC + Subnets + IGW | Red privada con 2 subnets públicas en distintas AZs |
+| Security Groups | ALB (80 público) + ECS (solo desde ALB) |
+| ALB + Target Group | Balanceador HTTP con health check |
+| API Gateway HTTP API v2 | Punto de entrada público, 1M llamadas gratis/mes |
+| ECS Cluster + Service | Fargate SPOT, 0.25 vCPU / 512 MB |
+| ECR Repository | Registro de imágenes Docker privado |
+| S3 Bucket | Assets estáticos con acceso público de lectura |
+| CloudWatch Logs | Retención de 1 día para costo cero |
+| IAM Roles | Execution role + Task role para ECS |
 
 ---
 
-## Prerrequisitos
+## Estructura del repositorio
 
-- [Terraform](https://www.terraform.io/downloads) (>= 1.5.0)
-- [AWS CLI](https://aws.amazon.com/cli/) configurado (`aws configure`) con credenciales y región adecuada.
-- [Docker](https://www.docker.com/) (para compilar y subir la imagen al ECR).
+```
+.
+├── bootstrap/                  # Stack de infraestructura de state remoto
+│   ├── main.tf                 # Bucket S3 + tabla DynamoDB para Terraform state
+│   ├── outputs.tf
+│   ├── variables.tf
+│   └── versions.tf
+├── .github/
+│   └── workflows/
+│       ├── deploy.yml          # CI/CD: bootstrap + apply del stack principal
+│       ├── destroy.yml         # Destruye solo el stack principal
+│       └── destroy-bootstrap.yml  # Destruye el backend de state (limpieza total)
+├── alb.tf
+├── apigateway.tf
+├── ecr.tf
+├── ecs.tf
+├── iam.tf
+├── outputs.tf
+├── s3.tf
+├── security.tf
+├── variables.tf
+├── versions.tf
+└── vpc.tf
+```
 
 ---
 
-## Guía Paso a Paso de Despliegue
+## Requisitos previos (pasos manuales, una sola vez)
 
-### 1. Inicializar Terraform
+Antes de ejecutar cualquier workflow es necesario configurar las credenciales AWS en GitHub.
 
-```bash
-terraform init
+### 1. Crear usuario IAM en AWS
+
+En la consola de AWS → IAM → Users → Create user:
+
+- **Nombre:** `dev` (o el que prefieras)
+- **Tipo de acceso:** Programmatic access (Access key)
+- **Política:** Adjuntar la política del archivo `iam-policy.json` que se incluye más adelante
+
+### 2. Configurar secrets en GitHub
+
+En el repositorio → Settings → Secrets and variables → Actions → New repository secret:
+
+| Secret | Valor |
+|---|---|
+| `AWS_ACCESS_KEY_ID` | Access key ID del usuario IAM |
+| `AWS_SECRET_ACCESS_KEY` | Secret access key del usuario IAM |
+| `AWS_REGION` | Región de despliegue, ej: `us-east-1` (opcional, por defecto `us-east-1`) |
+
+### 3. Política IAM mínima requerida
+
+El usuario IAM necesita los siguientes permisos para poder desplegar toda la infraestructura:
+
+<details>
+<summary>Ver política completa JSON</summary>
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "STSPermissions",
+      "Effect": "Allow",
+      "Action": ["sts:GetCallerIdentity"],
+      "Resource": "*"
+    },
+    {
+      "Sid": "VPCAndEC2Permissions",
+      "Effect": "Allow",
+      "Action": [
+        "ec2:CreateVpc", "ec2:DeleteVpc", "ec2:DescribeVpcs",
+        "ec2:DescribeVpcAttribute", "ec2:ModifyVpcAttribute",
+        "ec2:CreateSubnet", "ec2:DeleteSubnet", "ec2:DescribeSubnets",
+        "ec2:ModifySubnetAttribute",
+        "ec2:CreateInternetGateway", "ec2:DeleteInternetGateway",
+        "ec2:AttachInternetGateway", "ec2:DetachInternetGateway",
+        "ec2:DescribeInternetGateways",
+        "ec2:CreateRouteTable", "ec2:DeleteRouteTable",
+        "ec2:CreateRoute", "ec2:DeleteRoute",
+        "ec2:AssociateRouteTable", "ec2:DisassociateRouteTable",
+        "ec2:DescribeRouteTables",
+        "ec2:CreateSecurityGroup", "ec2:DeleteSecurityGroup",
+        "ec2:AuthorizeSecurityGroupIngress", "ec2:AuthorizeSecurityGroupEgress",
+        "ec2:RevokeSecurityGroupIngress", "ec2:RevokeSecurityGroupEgress",
+        "ec2:DescribeSecurityGroups", "ec2:DescribeSecurityGroupRules",
+        "ec2:DescribeAvailabilityZones",
+        "ec2:CreateTags", "ec2:DeleteTags"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "ALBPermissions",
+      "Effect": "Allow",
+      "Action": [
+        "elasticloadbalancing:CreateLoadBalancer", "elasticloadbalancing:DeleteLoadBalancer",
+        "elasticloadbalancing:DescribeLoadBalancers", "elasticloadbalancing:DescribeLoadBalancerAttributes",
+        "elasticloadbalancing:ModifyLoadBalancerAttributes",
+        "elasticloadbalancing:CreateTargetGroup", "elasticloadbalancing:DeleteTargetGroup",
+        "elasticloadbalancing:DescribeTargetGroups", "elasticloadbalancing:DescribeTargetGroupAttributes",
+        "elasticloadbalancing:ModifyTargetGroup", "elasticloadbalancing:ModifyTargetGroupAttributes",
+        "elasticloadbalancing:DescribeTargetHealth",
+        "elasticloadbalancing:CreateListener", "elasticloadbalancing:DeleteListener",
+        "elasticloadbalancing:DescribeListeners", "elasticloadbalancing:ModifyListener",
+        "elasticloadbalancing:DescribeListenerAttributes", "elasticloadbalancing:ModifyListenerAttributes",
+        "elasticloadbalancing:AddTags", "elasticloadbalancing:RemoveTags",
+        "elasticloadbalancing:DescribeTags"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "ECSPermissions",
+      "Effect": "Allow",
+      "Action": [
+        "ecs:CreateCluster", "ecs:DeleteCluster", "ecs:DescribeClusters",
+        "ecs:PutClusterCapacityProviders",
+        "ecs:RegisterTaskDefinition", "ecs:DeregisterTaskDefinition", "ecs:DescribeTaskDefinition",
+        "ecs:CreateService", "ecs:UpdateService", "ecs:DeleteService", "ecs:DescribeServices",
+        "ecs:ListTagsForResource", "ecs:TagResource", "ecs:UntagResource"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "ECRPermissions",
+      "Effect": "Allow",
+      "Action": [
+        "ecr:CreateRepository", "ecr:DeleteRepository", "ecr:DescribeRepositories",
+        "ecr:PutLifecyclePolicy", "ecr:GetLifecyclePolicy", "ecr:DeleteLifecyclePolicy",
+        "ecr:GetRepositoryPolicy", "ecr:SetRepositoryPolicy", "ecr:DeleteRepositoryPolicy",
+        "ecr:ListTagsForResource", "ecr:TagResource", "ecr:UntagResource",
+        "ecr:GetAuthorizationToken",
+        "ecr:BatchCheckLayerAvailability", "ecr:GetDownloadUrlForLayer", "ecr:BatchGetImage",
+        "ecr:PutImage", "ecr:InitiateLayerUpload", "ecr:UploadLayerPart", "ecr:CompleteLayerUpload"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "S3Permissions",
+      "Effect": "Allow",
+      "Action": [
+        "s3:CreateBucket", "s3:DeleteBucket", "s3:GetBucketLocation", "s3:ListBucket",
+        "s3:GetBucketPolicy", "s3:PutBucketPolicy", "s3:DeleteBucketPolicy",
+        "s3:GetBucketPublicAccessBlock", "s3:PutBucketPublicAccessBlock",
+        "s3:GetBucketCors", "s3:PutBucketCors", "s3:DeleteBucketCors",
+        "s3:GetBucketTagging", "s3:PutBucketTagging", "s3:DeleteBucketTagging",
+        "s3:GetBucketVersioning", "s3:PutBucketVersioning",
+        "s3:GetBucketObjectLockConfiguration",
+        "s3:GetLifecycleConfiguration", "s3:PutLifecycleConfiguration",
+        "s3:GetBucketLogging", "s3:GetAccelerateConfiguration",
+        "s3:GetBucketRequestPayment", "s3:GetEncryptionConfiguration",
+        "s3:PutEncryptionConfiguration",
+        "s3:GetObject", "s3:PutObject", "s3:DeleteObject"
+      ],
+      "Resource": "arn:aws:s3:::*"
+    },
+    {
+      "Sid": "DynamoDBPermissions",
+      "Effect": "Allow",
+      "Action": [
+        "dynamodb:CreateTable", "dynamodb:DeleteTable", "dynamodb:DescribeTable",
+        "dynamodb:DescribeTimeToLive", "dynamodb:ListTagsOfResource",
+        "dynamodb:TagResource", "dynamodb:UntagResource",
+        "dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:DeleteItem"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "APIGatewayV2Permissions",
+      "Effect": "Allow",
+      "Action": [
+        "apigateway:GET", "apigateway:POST", "apigateway:PUT",
+        "apigateway:PATCH", "apigateway:DELETE"
+      ],
+      "Resource": "arn:aws:apigateway:*::/*"
+    },
+    {
+      "Sid": "CloudWatchLogsPermissions",
+      "Effect": "Allow",
+      "Action": [
+        "logs:CreateLogGroup", "logs:DeleteLogGroup", "logs:DescribeLogGroups",
+        "logs:PutRetentionPolicy", "logs:DeleteRetentionPolicy",
+        "logs:ListTagsForResource", "logs:ListTagsLogGroup",
+        "logs:TagResource", "logs:UntagResource"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "IAMPermissionsForECS",
+      "Effect": "Allow",
+      "Action": [
+        "iam:CreateRole", "iam:DeleteRole", "iam:GetRole",
+        "iam:TagRole", "iam:UntagRole", "iam:ListRoleTags",
+        "iam:ListRolePolicies", "iam:GetRolePolicy",
+        "iam:ListInstanceProfilesForRole", "iam:ListAttachedRolePolicies",
+        "iam:CreatePolicy", "iam:DeletePolicy",
+        "iam:GetPolicy", "iam:GetPolicyVersion", "iam:ListPolicyVersions",
+        "iam:AttachRolePolicy", "iam:DetachRolePolicy"
+      ],
+      "Resource": [
+        "arn:aws:iam::*:role/limpiapipas-demo-*",
+        "arn:aws:iam::*:policy/limpiapipas-demo-*"
+      ]
+    },
+    {
+      "Sid": "IAMPassRoleForECS",
+      "Effect": "Allow",
+      "Action": "iam:PassRole",
+      "Resource": "arn:aws:iam::*:role/limpiapipas-demo-*",
+      "Condition": {
+        "StringEquals": {
+          "iam:PassedToService": "ecs-tasks.amazonaws.com"
+        }
+      }
+    }
+  ]
+}
 ```
 
-### 2. Revisar el Plan de Ejecución
+</details>
 
-```bash
+> **Nota:** También se añadió `DynamoDBPermissions` requerido por el bootstrap para crear y usar la tabla de state locking.
+
+---
+
+## Cómo desplegar la infraestructura
+
+### Automático (recomendado)
+
+El despliegue completo es totalmente automático. El workflow:
+
+1. Aplica el **bootstrap** (crea bucket S3 + tabla DynamoDB para el state remoto si no existen)
+2. Lee los outputs del bootstrap para configurar el backend dinámicamente
+3. Corre `terraform fmt -check`, `init`, `validate`, `plan` y `apply` del stack principal
+
+**Trigger automático:** cualquier push a la rama `main`.
+
+**Trigger manual:**
+1. Ir a Actions → **Deploy Terraform to AWS** → Run workflow → Run workflow
+
+Al finalizar, el job summary muestra las URLs y nombres de los recursos creados.
+
+### Secuencia interna del workflow
+
+```
+bootstrap/terraform init
+bootstrap/terraform apply       ← crea bucket tfstate + DynamoDB (idempotente)
+        │
+        └─ outputs: bucket_name, table_name, region
+                │
+                ▼
+terraform init -backend-config=...   ← configura backend S3 dinámicamente
+terraform fmt -check
+terraform validate
 terraform plan
+terraform apply
 ```
-
-### 3. Aplicar la Infraestructura
-
-```bash
-terraform apply -auto-approve
-```
-
-Al finalizar, Terraform mostrará los outputs con las URLs y nombres de recursos creados:
-- `api_gateway_url`: URL pública principal para ingresar a la demo.
-- `alb_dns_name`: URL directa al balanceador.
-- `ecr_repository_url`: URI del repositorio ECR.
-- `s3_bucket_name`: Nombre del bucket S3 para la imagen.
-- `sample_image_url`: Ejemplo de URL para referenciar la imagen en el HTML.
 
 ---
 
-## Despliegue Automatizado con GitHub Actions
+## Cómo destruir la infraestructura
 
-El repositorio incluye workflows de GitHub Actions para automatizar el ciclo de vida de la infraestructura:
+### Destruir solo el stack principal (mantiene el backend de state)
 
-### Secretos Requeridos en GitHub
+Usar este flujo para limpiar costos sin perder la capacidad de volver a desplegar.
 
-En tu repositorio de GitHub, ve a **Settings > Secrets and variables > Actions** y agrega los siguientes secretos de repositorio:
+1. Ir a Actions → **Destroy AWS Infrastructure** → Run workflow
+2. En el campo de confirmación escribir exactamente: `destroy`
+3. Hacer clic en **Run workflow**
 
-| Secreto | Descripción | Requerido |
-| :--- | :--- | :--- |
-| `AWS_ACCESS_KEY_ID` | Access Key ID de tu usuario IAM con permisos para Terraform | **Sí** |
-| `AWS_SECRET_ACCESS_KEY` | Secret Access Key correspondiente | **Sí** |
-| `AWS_REGION` | Región de AWS (ej: `us-east-1`). Por defecto usa `us-east-1` si se omite | No |
+Los recursos destruidos incluyen: VPC, ALB, ECS, ECR, S3 assets, API Gateway, CloudWatch Logs, IAM roles.
 
-### Workflows Incluidos
+El bucket de state y la tabla DynamoDB **se conservan**.
 
-1. **Deploy (`.github/workflows/deploy.yml`)**:
-   - **Trigger automático**: Cada vez que hagas `push` a la rama `main-aws`.
-   - **Trigger manual**: Puede ejecutarse desde la pestaña **Actions > Deploy Terraform to AWS > Run workflow**.
-   - Ejecuta `fmt`, `init`, `validate`, `plan` y `apply`, publicando un resumen con todas las URLs en el Step Summary de GitHub Actions.
+### Destruir todo (incluyendo el backend de state)
 
-2. **Destroy (`.github/workflows/destroy.yml`)**:
-   - **Trigger manual**: Se ejecuta desde la pestaña **Actions > Destroy AWS Infrastructure > Run workflow**.
-   - Requiere ingresar la confirmación `"destroy"` en el campo de entrada para evitar eliminaciones accidentales.
-   - Destruye todos los recursos de AWS para mantener costo $0 al concluir las pruebas.
+Usar este flujo solo cuando se quiere eliminar absolutamente todo de AWS.
+
+> **Importante:** ejecutar primero el destroy del stack principal antes de destruir el bootstrap.
+
+1. Asegurarse de haber corrido **Destroy AWS Infrastructure** primero
+2. Ir a Actions → **Destroy Bootstrap (State Backend)** → Run workflow
+3. En el campo de confirmación escribir exactamente: `destroy-bootstrap`
+4. Hacer clic en **Run workflow**
+
+### Resumen de flujos
+
+```
+Solo limpiar costos (re-deployable):
+  Destroy AWS Infrastructure  →  escribe "destroy"
+
+Limpieza total e irreversible:
+  Destroy AWS Infrastructure  →  escribe "destroy"
+  Destroy Bootstrap           →  escribe "destroy-bootstrap"
+```
 
 ---
 
-## Cómo Probar la Demo (S3 y Contenedor HTML)
+## Variables de configuración
 
-### 1. Subir la imagen a S3
+Las variables del stack principal se encuentran en `variables.tf`. Los valores por defecto están orientados a costo mínimo (capa gratuita de AWS).
 
-Sube cualquier imagen (por ejemplo `demo.png`) al bucket creado:
+| Variable | Default | Descripción |
+|---|---|---|
+| `aws_region` | `us-east-1` | Región AWS |
+| `project_name` | `limpiapipas-demo` | Prefijo de todos los recursos |
+| `environment` | `dev` | Etiqueta de ambiente |
+| `container_port` | `80` | Puerto del contenedor ECS |
+| `container_image` | `public.ecr.aws/docker/library/httpd:alpine` | Imagen inicial de prueba |
+| `desired_task_count` | `1` | Número de tareas ECS |
+| `fargate_cpu` | `256` | CPU Fargate (0.25 vCPU) |
+| `fargate_memory` | `512` | Memoria Fargate (512 MB) |
 
-```bash
-aws s3 cp demo.png s3://<NOMBRE_DEL_BUCKET>/demo.png
-```
-
-La imagen estará disponible públicamente en:
-`https://<NOMBRE_DEL_BUCKET>.s3.<REGION>.amazonaws.com/demo.png`
-
-### 2. Construir y Subir tu Contenedor HTML al ECR
-
-Supongamos que tienes un `Dockerfile` y un `index.html` simple que hace:
-```html
-<!DOCTYPE html>
-<html>
-<body>
-  <h1>Demo Limpiapipas</h1>
-  <img src="https://<NOMBRE_DEL_BUCKET>.s3.<REGION>.amazonaws.com/demo.png" alt="Imagen S3" />
-</body>
-</html>
-```
-
-Ejecuta los siguientes comandos para subir tu imagen a ECR:
-
-```bash
-# 1. Autenticar Docker con ECR (puedes copiar el comando exacto desde el output 'ecr_login_command')
-aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin <ECR_REPOSITORY_URL>
-
-# 2. Construir la imagen
-docker build -t limpiapipas-demo .
-
-# 3. Etiquetar la imagen para ECR
-docker tag limpiapipas-demo:latest <ECR_REPOSITORY_URL>:latest
-
-# 4. Subir la imagen
-docker push <ECR_REPOSITORY_URL>:latest
-```
-
-### 3. Actualizar el Servicio ECS con la Nueva Imagen
-
-Para indicarle a ECS que utilice tu imagen de ECR recién subida:
-
-```bash
-aws ecs update-service \
-  --cluster limpiapipas-demo-cluster \
-  --service limpiapipas-demo-service \
-  --force-new-deployment
-```
-
-### 4. Acceder a la Aplicación
-
-Abre en tu navegador la URL devuelta en `api_gateway_url`:
-```
-https://<api-id>.execute-api.us-east-1.amazonaws.com
-```
-
-Verás tu plantilla HTML cargada a través del API Gateway, pasando por el ALB, ejecutada en ECS Fargate, dibujando la imagen alojada en S3.
+Para sobreescribir valores sin modificar el código, crear un archivo `terraform.tfvars` (ignorado por git) o pasar `-var` en el workflow.
 
 ---
 
-## Destruir Recursos (Para Costo Cero al Terminar)
+## State remoto
 
-Cuando termines tu demostración o pruebas, destruye toda la infraestructura para evitar cualquier cobro residual:
+El state de Terraform se almacena en S3 con locking via DynamoDB, gestionado automáticamente por el stack bootstrap:
 
-```bash
-terraform destroy -auto-approve
-```
+| Recurso | Nombre |
+|---|---|
+| Bucket S3 | `limpiapipas-demo-tfstate-<sufijo>` |
+| Tabla DynamoDB | `limpiapipas-demo-tfstate-lock` |
+| Clave del state | `terraform.tfstate` |
+
+El state del propio bootstrap se guarda localmente en `bootstrap/terraform.tfstate` y está commiteado en el repositorio. No contiene secretos, solo IDs de recursos de infraestructura de soporte.

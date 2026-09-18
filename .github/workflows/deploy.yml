@@ -25,39 +25,67 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }}
+          aws-region: ${{ env.AWS_REGION }}
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: "1.9.0"
+          terraform_wrapper: false
 
+      # ------------------------------------------------------------------
+      # BOOTSTRAP: crea el bucket S3 y la tabla DynamoDB para el state
+      # remoto si no existen todavia. Es idempotente: si ya existen,
+      # terraform apply no hace nada.
+      # ------------------------------------------------------------------
+      - name: Bootstrap Init
+        run: terraform init
+        working-directory: bootstrap
+
+      - name: Bootstrap Apply
+        run: terraform apply -auto-approve -no-color
+        working-directory: bootstrap
+
+      - name: Read Bootstrap Outputs
+        id: bootstrap
+        run: |
+          echo "bucket=$(terraform output -raw state_bucket_name)" >> $GITHUB_OUTPUT
+          echo "table=$(terraform output -raw dynamodb_table_name)"  >> $GITHUB_OUTPUT
+          echo "region=$(terraform output -raw aws_region)"          >> $GITHUB_OUTPUT
+        working-directory: bootstrap
+
+      # ------------------------------------------------------------------
+      # STACK PRINCIPAL
+      # ------------------------------------------------------------------
       - name: Terraform Format Check
-        id: fmt
         run: terraform fmt -check
 
       - name: Terraform Init
-        id: init
-        run: terraform init
+        run: |
+          terraform init \
+            -backend-config="bucket=${{ steps.bootstrap.outputs.bucket }}" \
+            -backend-config="key=terraform.tfstate" \
+            -backend-config="region=${{ steps.bootstrap.outputs.region }}" \
+            -backend-config="dynamodb_table=${{ steps.bootstrap.outputs.table }}" \
+            -backend-config="encrypt=true"
 
       - name: Terraform Validate
-        id: validate
         run: terraform validate -no-color
 
       - name: Terraform Plan
-        id: plan
         run: terraform plan -no-color
 
       - name: Terraform Apply
-        id: apply
         run: terraform apply -auto-approve -no-color
 
       - name: Output Deployment Summary
         run: |
-          echo "### 🚀 Despliegue Exitoso en AWS" >> $GITHUB_STEP_SUMMARY
+          echo "### Despliegue Exitoso en AWS" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "- **API Gateway URL:** $(terraform output -raw api_gateway_url)" >> $GITHUB_STEP_SUMMARY
           echo "- **ALB DNS Name:** $(terraform output -raw alb_dns_name)" >> $GITHUB_STEP_SUMMARY
           echo "- **ECR Repository:** $(terraform output -raw ecr_repository_url)" >> $GITHUB_STEP_SUMMARY
           echo "- **S3 Bucket Name:** $(terraform output -raw s3_bucket_name)" >> $GITHUB_STEP_SUMMARY
           echo "- **Sample Image URL:** $(terraform output -raw sample_image_url)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **State Bucket:** ${{ steps.bootstrap.outputs.bucket }}" >> $GITHUB_STEP_SUMMARY

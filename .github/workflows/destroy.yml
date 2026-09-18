@@ -34,16 +34,47 @@ jobs:
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: "1.9.0"
+          terraform_wrapper: false
 
-      - name: Terraform Init
-        id: init
+      # ------------------------------------------------------------------
+      # Leer outputs del bootstrap para obtener el nombre del bucket y
+      # la tabla DynamoDB sin hardcodearlos.
+      # El bootstrap NO se destruye aqui: el bucket de state debe
+      # sobrevivir para futuros re-deploys.
+      # ------------------------------------------------------------------
+      - name: Bootstrap Init
         run: terraform init
+        working-directory: bootstrap
+
+      - name: Read Bootstrap Outputs
+        id: bootstrap
+        run: |
+          echo "bucket=$(terraform output -raw state_bucket_name)" >> $GITHUB_OUTPUT
+          echo "table=$(terraform output -raw dynamodb_table_name)"  >> $GITHUB_OUTPUT
+          echo "region=$(terraform output -raw aws_region)"          >> $GITHUB_OUTPUT
+        working-directory: bootstrap
+
+      # ------------------------------------------------------------------
+      # STACK PRINCIPAL: destruir todos los recursos de negocio
+      # ------------------------------------------------------------------
+      - name: Terraform Init
+        run: |
+          terraform init \
+            -backend-config="bucket=${{ steps.bootstrap.outputs.bucket }}" \
+            -backend-config="key=terraform.tfstate" \
+            -backend-config="region=${{ steps.bootstrap.outputs.region }}" \
+            -backend-config="dynamodb_table=${{ steps.bootstrap.outputs.table }}" \
+            -backend-config="encrypt=true"
 
       - name: Terraform Destroy
-        id: destroy
         run: terraform destroy -auto-approve -no-color
 
       - name: Output Destroy Summary
         run: |
-          echo "### 🗑️ Infraestructura Destruida con Exito" >> $GITHUB_STEP_SUMMARY
-          echo "Todos los recursos de AWS asociados a esta demo han sido eliminados correctamente." >> $GITHUB_STEP_SUMMARY
+          echo "### Infraestructura Destruida con Exito" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Todos los recursos de AWS del stack principal han sido eliminados." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "> El bucket de state **${{ steps.bootstrap.outputs.bucket }}** y la tabla DynamoDB" >> $GITHUB_STEP_SUMMARY
+          echo "> **${{ steps.bootstrap.outputs.table }}** se conservan para futuros re-deploys." >> $GITHUB_STEP_SUMMARY
+          echo "> Para eliminarlos definitivamente, ejecuta el workflow **Destroy Bootstrap**." >> $GITHUB_STEP_SUMMARY
