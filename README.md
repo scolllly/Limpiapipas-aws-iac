@@ -188,17 +188,30 @@ El usuario IAM necesita los siguientes permisos para poder desplegar toda la inf
         "s3:GetBucketRequestPayment", "s3:GetEncryptionConfiguration",
         "s3:PutEncryptionConfiguration",
         "s3:GetObject", "s3:PutObject", "s3:DeleteObject",
-        "s3:GetBucketAcl", "s3:PutBucketAcl"
+        "s3:GetBucketAcl", "s3:PutBucketAcl",
+        "s3:GetBucketWebsite", "s3:PutBucketWebsite", "s3:DeleteBucketWebsite",
+        "s3:GetBucketNotification", "s3:PutBucketNotification",
+        "s3:GetReplicationConfiguration", "s3:PutReplicationConfiguration",
+        "s3:GetAnalyticsConfiguration", "s3:GetMetricsConfiguration",
+        "s3:GetInventoryConfiguration"
       ],
       "Resource": "arn:aws:s3:::*"
     },
+    {
+      "Sid": "DynamoDBPermissions",
       "Effect": "Allow",
       "Action": [
-        "dynamodb:CreateTable", "dynamodb:DeleteTable", "dynamodb:DescribeTable",
-        "dynamodb:DescribeTimeToLive", "dynamodb:DescribeContinuousBackups",
+        "dynamodb:CreateTable",
+        "dynamodb:DeleteTable",
+        "dynamodb:DescribeTable",
+        "dynamodb:DescribeTimeToLive",
+        "dynamodb:DescribeContinuousBackups",
         "dynamodb:ListTagsOfResource",
-        "dynamodb:TagResource", "dynamodb:UntagResource",
-        "dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:DeleteItem"
+        "dynamodb:TagResource",
+        "dynamodb:UntagResource",
+        "dynamodb:GetItem",
+        "dynamodb:PutItem",
+        "dynamodb:DeleteItem"
       ],
       "Resource": "*"
     },
