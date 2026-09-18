@@ -123,7 +123,8 @@ El usuario IAM necesita los siguientes permisos para poder desplegar toda la inf
         "ec2:RevokeSecurityGroupIngress", "ec2:RevokeSecurityGroupEgress",
         "ec2:DescribeSecurityGroups", "ec2:DescribeSecurityGroupRules",
         "ec2:DescribeAvailabilityZones",
-        "ec2:CreateTags", "ec2:DeleteTags"
+        "ec2:CreateTags", "ec2:DeleteTags",
+        "ec2:DescribeAccountAttributes"
       ],
       "Resource": "*"
     },
@@ -234,7 +235,8 @@ El usuario IAM necesita los siguientes permisos para poder desplegar toda la inf
       "Effect": "Allow",
       "Action": [
         "apigateway:GET", "apigateway:POST", "apigateway:PUT",
-        "apigateway:PATCH", "apigateway:DELETE"
+        "apigateway:PATCH", "apigateway:DELETE",
+        "apigateway:TagResource"
       ],
       "Resource": [
         "arn:aws:apigateway:*::/*",
