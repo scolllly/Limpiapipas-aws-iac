@@ -124,7 +124,8 @@ El usuario IAM necesita los siguientes permisos para poder desplegar toda la inf
         "ec2:DescribeSecurityGroups", "ec2:DescribeSecurityGroupRules",
         "ec2:DescribeAvailabilityZones",
         "ec2:CreateTags", "ec2:DeleteTags",
-        "ec2:DescribeAccountAttributes"
+        "ec2:DescribeAccountAttributes",
+        "ec2:DescribeNetworkInterfaces"
       ],
       "Resource": "*"
     },
